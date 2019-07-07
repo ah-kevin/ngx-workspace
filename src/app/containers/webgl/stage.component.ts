@@ -54,6 +54,7 @@ export class StageComponent implements OnInit, AfterViewInit {
     this.scene.add(grid);
 
     this.geometry = new BoxGeometry(1, 1);
+    this.geometry.computeBoundingBox();
     // this.geometry = new TorusGeometry(1, 0.2, 20, 20);
     this.material = new MeshNormalMaterial();
     this.mesh = new Mesh(this.geometry, this.material);
@@ -101,12 +102,12 @@ export class StageComponent implements OnInit, AfterViewInit {
     // 将标准化屏幕坐标系[-1,1]转换为像素坐标：
     const pixelCoordScale = this.normalizedToPixels(boundingBox2D.getSize(), this.renderSrv.renderWidth, this.renderSrv.renderHeight);
     const pixelCoordCenter = this.normalizedToPixels(boundingBox2D.getCenter(), this.renderSrv.renderWidth, this.renderSrv.renderHeight);
-    console.log(pixelCoordScale);
-    console.log(pixelCoordCenter);
+    // console.log(pixelCoordScale);
+    // console.log(pixelCoordCenter);
     this.overlayBox.scale.set(pixelCoordScale.x, pixelCoordScale.y, 1);
     this.overlayBox.position.set(pixelCoordCenter.x, pixelCoordCenter.y, 0);
     // @ts-ignore
-    this.overlayBox.needsUpdate = true;
+    // console.log(objectVer);
 
     this.render();
   }
@@ -124,7 +125,12 @@ export class StageComponent implements OnInit, AfterViewInit {
       const vertexScreenSpace = vertexWorldCoord.project(camera);
       min.min(vertexScreenSpace);
       max.max(vertexScreenSpace);
+      // 标准设备坐标转屏幕坐标
+      // 标准设备坐标转屏幕坐标
+      // console.log(Math.round(vertexScreenSpace.x * window.innerWidth / 2 + window.innerWidth / 2), Math.round(-vertexScreenSpace.y * window.innerHeight/2
+      //   + window.innerHeight/2));
     }
+
     // @ts-ignore
     return new Box2(min, max);
   }
@@ -136,7 +142,39 @@ export class StageComponent implements OnInit, AfterViewInit {
 
   onMouseDown(event: MouseEvent) {
     console.log(event.clientX, event.clientY);
-    console.log(this.scene2);
+    // console.log(this.scene2);
     this.animate();
+    this.tag();
+  }
+
+  tag() {
+    // 获取网格模型boxMesh的世界坐标
+    const worldVector = new Vector3(
+      this.mesh.position.x,
+      this.mesh.position.y,
+      this.mesh.position.z
+    );
+    const max = this.mesh.geometry.boundingBox.max;
+    const min = this.mesh.geometry.boundingBox.min;
+    const maxP = max.project(this.camera);
+    const minP = min.project(this.camera);
+    const standardVector = worldVector.project(this.camera); // 世界坐标转标准设备坐标
+    // console.log(maxP);
+    // console.log(minP);
+    // console.log(standardVector);
+
+    const a = window.innerWidth / 2;
+    const b = window.innerHeight / 2;
+    const x = Math.round(standardVector.x * a + a); // 标准设备坐标转屏幕坐标
+    const y = Math.round(-standardVector.y * b + b); // 标准设备坐标转屏幕坐标
+    console.log(Math.round(maxP.x * a + a), Math.round(-maxP.y * b + b));
+    console.log(Math.round(minP.x * a + a), Math.round(-minP.y * b + b));
+    // const boundingBox2D = this.computeScreenSpaceBoundingBox(this.mesh, this.camera);
+    // console.log(boundingBox2D);
+    // console.log(this.mesh.geometry.boundingBox);
+    // const x1 = Math.round(boundingBox2D.min.x * a + a); // 标准设备坐标转屏幕坐标
+    // const y1 = Math.round(-boundingBox2D.min.y * b + b); // 标准设备坐标转屏幕坐标
+    // console.log(x, y);
+    // console.log(x1, y1);
   }
 }
