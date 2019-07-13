@@ -1,16 +1,8 @@
 import { Component, OnInit, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
 import { RendererService } from 'src/app/services/renderer.service';
-import {
-  WebGLRenderer,
-  Scene,
-  PerspectiveCamera,
-  GridHelper,
-  BoxGeometry,
-  MeshNormalMaterial,
-  Mesh,
-  OrthographicCamera,
-  MeshBasicMaterial, PlaneGeometry, Vector3, Box2, Vector2, TorusGeometry
-} from 'three';
+import { WebGLRenderer, PerspectiveCamera, Vector3, Scene, AmbientLight, Geometry, LineBasicMaterial, Line } from 'three';
+import { SimpleCube } from '../../utils/rubiksCube';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
 @Component({
   selector: 'app-stage',
@@ -20,15 +12,20 @@ import {
 export class StageComponent implements OnInit, AfterViewInit {
   renderer: WebGLRenderer;
   @ViewChild('container', {static: false}) container: ElementRef;
-  scene: Scene;
+  element: HTMLElement;
   private camera: PerspectiveCamera;
-  private geometry: BoxGeometry | TorusGeometry;
-  private material: MeshNormalMaterial;
-  private mesh: Mesh;
-  private scene2: Scene;
-  private camera2: OrthographicCamera;
-  private overlayBox: Mesh;
-  startTime = new Date().getTime();
+  private scene: Scene;
+  // 魔方参数
+  cubeParams = {
+    x: 0,
+    y: 0,
+    z: 0,
+    num: 3,
+    len: 50,
+    colors: ['rgba(255,193,37,1)', 'rgba(0,191,255,1)',
+      'rgba(50,205,50,1)', 'rgba(178,34,34,1)',
+      'rgba(255,255,0,1)', 'rgba(255,255,255,1)']
+  };
 
   constructor(private renderSrv: RendererService) {
     this.renderer = this.renderSrv.getRenderer();
@@ -38,143 +35,93 @@ export class StageComponent implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit(): void {
+    this.element = this.container.nativeElement;
+    this.renderer.setSize(this.element.clientWidth, this.element.clientHeight);
+    this.renderer.setClearColor(0xFFFFFF, 1.0);
     this.container.nativeElement.appendChild(this.renderer.domElement);
     this.init();
     // this.animate();
   }
 
   init() {
-    this.scene = new Scene();
-    this.camera = new PerspectiveCamera(50, this.renderSrv.renderWidth / this.renderSrv.renderHeight, 0.1, 1000);
-    this.camera.position.set(0, 2, 10);
-    this.scene.add(this.camera);
-
-    const grid = new GridHelper(10, 5, 0xFFFF00, 0xFFFF00);
-    grid.position.y = 0;
-    this.scene.add(grid);
-
-    this.geometry = new BoxGeometry(1, 1);
-    this.geometry.computeBoundingBox();
-    // this.geometry = new TorusGeometry(1, 0.2, 20, 20);
-    this.material = new MeshNormalMaterial();
-    this.mesh = new Mesh(this.geometry, this.material);
-    this.scene.add(this.mesh);
-
-    this.scene2 = new Scene();
-    this.camera2 = new OrthographicCamera(-this.renderSrv.renderWidth / 2, this.renderSrv.renderWidth / 2,
-      this.renderSrv.renderHeight / 2, -this.renderSrv.renderHeight / 2, 0.1, 1000);
-    this.scene2.add(this.camera2);
-
-    this.overlayBox = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial({wireframe: true}));
-    this.scene2.add(this.overlayBox);
-    this.camera2.position.set(0, 0, 10);
-    this.camera2.lookAt(new Vector3());
-
+    this.initCamera();
+    this.initScene();
+    this.initLight();
+    this.initObject();
     this.render();
   }
 
   private render() {
     this.renderer.clear();
     this.renderer.render(this.scene, this.camera);
-    this.renderer.clearDepth();
-    this.renderer.render(this.scene2, this.camera2);
     // console.log(this.scene);
     // console.log(this.scene2);
+    requestAnimationFrame(() => this.render());
   }
 
   private animate() {
-    // requestAnimationFrame(() => this.animate());
-    const time = (new Date().getTime() - this.startTime) / 1000;
 
-    const speed = 0.6;
-    const cameraRadius = 4;
-
-    // Rotate camera:
-    // camera.position.copy(
-    //  new THREE.Vector3(Math.sin(time*speed), 0.5, Math.cos(time*speed)).multiplyScalar(cameraRadius)
-    // );
-    // camera.lookAt(new THREE.Vector3());
-    // camera.rotation.x = Math.sin( time * 2.0 ) * 0.1 - 0.1;
-
-    // Rotate mesh:
-    // mesh.rotation.set(time, 0, 0);
-    const boundingBox2D = this.computeScreenSpaceBoundingBox(this.mesh, this.camera);
-    // 将标准化屏幕坐标系[-1,1]转换为像素坐标：
-    const pixelCoordScale = this.normalizedToPixels(boundingBox2D.getSize(), this.renderSrv.renderWidth, this.renderSrv.renderHeight);
-    const pixelCoordCenter = this.normalizedToPixels(boundingBox2D.getCenter(), this.renderSrv.renderWidth, this.renderSrv.renderHeight);
-    // console.log(pixelCoordScale);
-    // console.log(pixelCoordCenter);
-    this.overlayBox.scale.set(pixelCoordScale.x, pixelCoordScale.y, 1);
-    this.overlayBox.position.set(pixelCoordCenter.x, pixelCoordCenter.y, 0);
-    // @ts-ignore
-    // console.log(objectVer);
-
-    this.render();
   }
 
-  computeScreenSpaceBoundingBox(mesh, camera) {
-    console.log(mesh);
-    const vertices = mesh.geometry.vertices;
-    const vertex = new Vector3();
-    const min = new Vector3(1, 1, 1);
-    const max = new Vector3(-1, -1, -1);
+  // 创建相机，并设置正方向和中心点
+  private initCamera() {
+    this.camera = new PerspectiveCamera(45, this.element.clientWidth / this.element.clientHeight, 1, 1000);
+    this.camera.position.set(0, 0, 600);
+    this.camera.up.set(0, 1, 0); // 正方向
+    this.camera.lookAt(new Vector3());
+    // 视角控制
+    const controller = new OrbitControls(this.camera, this.renderer.domElement);
+    controller.target = new Vector3(); // 设置控制点
+  }
 
+  // 创建场景，后续元素需要加入到场景中才会显示出来
+  private initScene() {
+    this.scene = new Scene();
+  }
+
+  private initLight() {
+    const ambientLight = new AmbientLight(0xfefefe);
+    this.scene.add(ambientLight);
+  }
+
+  private initObject() {
+    // this.initLine();
+    // 生成魔方小正方体
+    const cubes = SimpleCube(this.cubeParams.x, this.cubeParams.y, this.cubeParams.z, this.cubeParams.num, this.cubeParams.len, this.cubeParams.colors);
     // tslint:disable-next-line:prefer-for-of
-    for (let i = 0; i < vertices.length; i++) {
-      const vertexWorldCoord = vertex.copy(vertices[i]).applyMatrix4(mesh.matrixWorld);
-      const vertexScreenSpace = vertexWorldCoord.project(camera);
-      min.min(vertexScreenSpace);
-      max.max(vertexScreenSpace);
-      // 标准设备坐标转屏幕坐标
-      // 标准设备坐标转屏幕坐标
-      // console.log(Math.round(vertexScreenSpace.x * window.innerWidth / 2 + window.innerWidth / 2), Math.round(-vertexScreenSpace.y * window.innerHeight/2
-      //   + window.innerHeight/2));
+    for (let i = 0; i < cubes.length; i++) {
+      const item = cubes[i];
+      this.scene.add(cubes[i]); //  并依次加入到场景中
     }
-
-    // @ts-ignore
-    return new Box2(min, max);
   }
 
-  normalizedToPixels(coord, renderWidthPixels, renderHeightPixels) {
-    const halfScreen = new Vector2(renderWidthPixels / 2, renderHeightPixels / 2);
-    return coord.clone().multiply(halfScreen);
-  }
-
-  onMouseDown(event: MouseEvent) {
-    console.log(event.clientX, event.clientY);
-    // console.log(this.scene2);
-    this.animate();
-    this.tag();
-  }
-
-  tag() {
-    // 获取网格模型boxMesh的世界坐标
-    const worldVector = new Vector3(
-      this.mesh.position.x,
-      this.mesh.position.y,
-      this.mesh.position.z
+  private initLine() {
+    // 坐标轴
+    const xmat = new LineBasicMaterial({color: 0xff0000});
+    const xgeo = new Geometry();
+    xgeo.vertices.push(
+      new Vector3(0, 0, 0),
+      new Vector3(300, 0, 0)
     );
-    const max = this.mesh.geometry.boundingBox.max;
-    const min = this.mesh.geometry.boundingBox.min;
-    const maxP = max.project(this.camera);
-    const minP = min.project(this.camera);
-    const standardVector = worldVector.project(this.camera); // 世界坐标转标准设备坐标
-    // console.log(maxP);
-    // console.log(minP);
-    // console.log(standardVector);
+    const xline = new Line(xgeo, xmat);
+    this.scene.add(xline);
 
-    const a = window.innerWidth / 2;
-    const b = window.innerHeight / 2;
-    const x = Math.round(standardVector.x * a + a); // 标准设备坐标转屏幕坐标
-    const y = Math.round(-standardVector.y * b + b); // 标准设备坐标转屏幕坐标
-    console.log(Math.round(maxP.x * a + a), Math.round(-maxP.y * b + b));
-    console.log(Math.round(minP.x * a + a), Math.round(-minP.y * b + b));
-    // const boundingBox2D = this.computeScreenSpaceBoundingBox(this.mesh, this.camera);
-    // console.log(boundingBox2D);
-    // console.log(this.mesh.geometry.boundingBox);
-    // const x1 = Math.round(boundingBox2D.min.x * a + a); // 标准设备坐标转屏幕坐标
-    // const y1 = Math.round(-boundingBox2D.min.y * b + b); // 标准设备坐标转屏幕坐标
-    // console.log(x, y);
-    // console.log(x1, y1);
+    const ymat = new LineBasicMaterial({color: 0x00ff00});
+    const ygeo = new Geometry();
+    ygeo.vertices.push(
+      new Vector3(0, 0, 0),
+      new Vector3(0, 300, 0)
+    );
+    const yline = new Line(ygeo, ymat);
+    this.scene.add(yline);
+
+    const zmat = new LineBasicMaterial({color: 0x0000ff});
+    const zgeo = new Geometry();
+    zgeo.vertices.push(
+      new Vector3(0, 0, 0),
+      new Vector3(0, 0, 300)
+    );
+    const zline = new Line(zgeo, zmat);
+    this.scene.add(zline);
   }
 }

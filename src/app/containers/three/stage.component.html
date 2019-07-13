@@ -1,2 +1,11 @@
-<div class="container" #container (mousedown)="onMouseDown($event)">
-</div>
+<nz-layout>
+  <nz-header>
+    <app-menu-bar></app-menu-bar>
+  </nz-header>
+  <nz-layout>
+    <nz-content>
+      <div class="container" #container>
+      </div>
+    </nz-content>
+  </nz-layout>
+</nz-layout>
