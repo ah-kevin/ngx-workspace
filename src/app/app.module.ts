@@ -3,7 +3,7 @@ import { NgModule } from '@angular/core';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
-import { StageComponent } from './containers/webgl/stage.component';
+import { StageComponent } from './containers/three/stage.component';
 
 
 @NgModule({
